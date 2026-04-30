@@ -166,12 +166,12 @@ function BTC_cascaded_model(NS, Omega1, Omega2, kappa, deltavarphi)
     id_S=sparse(I,Int128(S),Int128(S))
 
     # Hamiltonian
-    Hcasc = -1im*(kappa/2.0)*(kron(Sp,Sp')*exp(-1im*deltavarphi)-kron(Sp',Sp)*exp(1im*deltavarphi))
+    Hcasc = -1im*(kappa/2.0)*(kron(Sp',Sp)*exp(-1im*deltavarphi)-kron(Sp,Sp')*exp(1im*deltavarphi))
     H = 0.5*Omega1*(kron(Sp,id_S)+kron(Sp',id_S)) + 0.5*Omega2*(kron(id_S,Sp)+kron(id_S,Sp')) + Hcasc
 
     # Derivative of the Hamiltonian with respect to the different parameters
     Hdomega = 0.5*(kron(Sp,id_S)+kron(Sp',id_S))
-    Hdvarphi = -1*(kappa/2.0)*(kron(Sp',Sp)*exp(-1im*deltavarphi)-kron(Sp,Sp')*exp(1im*deltavarphi))
+    Hdvarphi = -(kappa/2.0)*(exp(-1im*deltavarphi)*kron(Sp',Sp) + exp(1im*deltavarphi)*kron(Sp,Sp'))
 
     # Photon losses
     L = sqrt(kappa)*(kron(Sp',id_S)*exp(-1im*deltavarphi)+kron(id_S,Sp'))
