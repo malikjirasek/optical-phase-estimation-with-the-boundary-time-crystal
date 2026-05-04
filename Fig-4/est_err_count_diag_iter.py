@@ -20,12 +20,12 @@ from scipy.sparse.linalg import eigs
 from pathlib import Path
 settings.core = CoreOptions(default_dtype='CSR')
 #------------------------------------------------------------------------------#
-ratios = [4] # omega/omega_c values to iterate over
+ratios = [0.25,4] # omega/omega_c values to iterate over
 dphis = np.logspace(-3,-1,30,True,10) # phase shift values to iterate over
-Ns = [6,11,16] # system sizes to iterate over
+Ns = [6] # system sizes to iterate over
 # save in the same directory as this script (fallback to cwd if running interactively)
 script_dir = Path(__file__).resolve().parent if '__file__' in globals() else Path.cwd()
-filename = script_dir / f'est_err_abs_fig4c.csv'
+filename = script_dir / f'est_err_abs_fig4a_N6.csv'
 #------------------------------------------------------------------------------#
 EST_ERR = np.array([np.zeros(6)]) #initialize array to store data, each row
                                   #corresponds to 
