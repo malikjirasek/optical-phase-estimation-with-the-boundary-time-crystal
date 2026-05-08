@@ -19,130 +19,98 @@ using Statistics
 
 
 ############################################ Main #############################
+NS         = 6
+kappa      = 1
+Omega_c    = kappa * NS / 2
+dt         = 0.001
+t_final    = 3e4
+n_save     = 500           # save every n_save steps  →  dt_save = 0.5
+num_traj   = 27
 
-#name_file="./N30/FI_t_params_7_dt7_N30.dat"
-name_fig="./N6/fig_params_7_dt7.pdf"
-NS = 6 # Change for other parameters [10,15]
-name_file="./FI_time_resolved_N$(NS)_ratio$(4).dat"
-dOmega = 0.0001
-dvarphi = 0.001
-t_final = 2e4
-timespan = 0:1:t_final
-kappa = 1
-Omega_c = kappa*NS/2
-Omega1 = 4*Omega_c # Change to 0.1 for stationary regime 
-Omega2 = 1.0*Omega1
-varphi = 1.570796327
-deltavarphi=0.005
-phase_homodyne = 1.570796327
-dt = 0.01 # Change for smaller/larger stepsize
-n_save = 50
-Ntime = Int(floor(t_final/dt)) # Number of timesteps
-timespan_fisher = (1 : Ntime) * dt
-num_traj = 1000 # Number of trajectories to average over for the Fisher information. Change for more/less trajectories.
-# Change to (theta,phi)=(pi/2,0) etc. for FIGSM2 (a-c)
+# Steady-state averaging window for the FI rate
+t_stat     = 1e4
+t_stat_idx = Int(floor(t_stat / (n_save * dt)))
+
+# Initial state: |J,J> ⊗ |J,J>
 theta = 0
-phi = 0
+phi   = 0
 init_state_spins = Dicke_state(theta, phi, NS/2)
-init_state_spins = init_state_spins/norm(init_state_spins)
-init_state = kron(init_state_spins,init_state_spins)
+init_state_spins = init_state_spins / norm(init_state_spins)
+psi0_SB          = kron(init_state_spins, init_state_spins)
 
+# Sweep grid
+ratios             = [0.25]#, 0.25, 0.75, 4.0]
+deltavarphi_values = exp10.(range(log10(0.001), log10(0.1), length=2))
 
-println("dt: ",dt)
-println("w over wc: ",Omega1/Omega_c)
+println("dt = $dt   t_final = $t_final   n_save = $n_save   num_traj = $num_traj")
+println("Steady-state window: t ∈ [$t_stat, $t_final]   (saved index $t_stat_idx:end)")
+println("Sweep: $(length(ratios)) ratios × $(length(deltavarphi_values)) deltavarphi = $(length(ratios)*length(deltavarphi_values)) runs")
 
+# ---------- legacy single-parameter time-resolved run (kept for reference) ----
+#H, Hdomega, Hdvarphi, L, dLomega, dLvarphi, expectation_values, _ = BTC_cascaded_model(NS, Omega1, Omega2, kappa, deltavarphi)
+#t_SB, exp_val1_SB, exp_val2_SB, emissions_SB, FisherT_SB_omega, ErrorFisher = Fisher_trajectory_reduced( H, Hdvarphi, L, dLvarphi, num_traj, psi0_SB, ops_SB, t_final, dt, n_save)
+#writedlm("./FI_time_resolved_N$(NS)_ratio$(Omega1/Omega_c).dat", hcat(t_SB, FisherT_SB_omega, ErrorFisher))
 
-# Initialize files
-#label = "data"*string(task_id)*".h5"   
-#data = joinpath( folderpath, label )
+############################################ Sweep ############################
+# Output directory structure (anchored at the script's directory):
+#   <script_dir>/sweep_dt<dt>_<num_traj>trajs/
+#       ├── summary.csv                           (one row per (ratio, dφ))
+#       └── ratio_<r>/
+#             └── time_resolved_deltavarphi_<dφ>.dat
+sweep_dir   = joinpath(@__DIR__, "sweep_dt$(dt)_$(num_traj)trajs")
+mkpath(sweep_dir)
+summary_csv = joinpath(sweep_dir, "summary.csv")
+open(summary_csv, "w") do io
+    println(io, ",NS,ratio,deltavarphi,mean_FI_rate,std_FI_rate")
+end
+println("Output directory: $sweep_dir")
+println("Summary CSV:      $summary_csv")
 
-time0=time()
+row_idx     = 0
+total_runs  = length(ratios) * length(deltavarphi_values)
+total_start = time()
 
+for (i, ratio) in enumerate(ratios)
+    Omega1 = ratio * Omega_c
+    Omega2 = Omega1
+    ratio_dir = joinpath(sweep_dir, "ratio_$(ratio)")
+    mkpath(ratio_dir)
+    println("\n========== [$i/$(length(ratios))] ratio = $ratio   (Omega1 = $Omega1) ==========")
 
-# Construct relevant objects
-H, Hdomega, Hdvarphi, L, dLomega, dLvarphi, expectation_values, _ = BTC_cascaded_model(NS, Omega1, Omega2, kappa, deltavarphi)
-psi0_SB = init_state
-ops_SB = expectation_values
-# Determine FI and QFI for ideal photocounting
-println("Starting Fisher_trajectory_reduced with num_traj = ", num_traj)
-t_SB, exp_val1_SB, exp_val2_SB, emissions_SB, FisherT_SB_omega, ErrorFisher = Fisher_trajectory_reduced( H, Hdvarphi, L, dLvarphi, num_traj, psi0_SB, ops_SB, t_final, dt,n_save)
+    for (j, dφ) in enumerate(deltavarphi_values)
+        run_idx = (i - 1) * length(deltavarphi_values) + j
+        println("[$run_idx/$total_runs] ratio = $ratio,  deltavarphi = $dφ")
+        t0 = time()
 
+        H_sw, _, Hdvarphi_sw, L_sw, _, dLvarphi_sw, ops_sw, _ =
+            BTC_cascaded_model(NS, Omega1, Omega2, kappa, dφ)
 
-time1=time()
-println("Run time: ",time1-time0)
+        t_sw, _, _, _, FI_sw, err_sw =
+            Fisher_trajectory_reduced(H_sw, Hdvarphi_sw, L_sw, dLvarphi_sw,
+                                       num_traj, psi0_SB, ops_sw,
+                                       t_final, dt, n_save)
 
-i = Int(floor(2000/(n_save*dt)))
-println("Mean: $(mean(FisherT_SB_omega[i:end]./ t_SB[i:end]))")
-println("Std:  $(mean(ErrorFisher[i:end]./ t_SB[i:end]))")
-println("QFI Stationary:", 4*Omega1*Omega1/kappa)
-println("QFI TC asymptotic:", kappa*NS*(NS+2)*((NS-1)*(NS+3)/135+2/3))
+        mean_rate = mean(FI_sw[t_stat_idx:end]  ./ t_sw[t_stat_idx:end])
+        std_rate  = mean(err_sw[t_stat_idx:end] ./ t_sw[t_stat_idx:end])
 
+        println("  mean FI rate = $mean_rate  ±  $std_rate     ($(round(time()-t0, digits=1)) s)")
 
-writedlm(name_file,hcat(t_SB,FisherT_SB_omega,ErrorFisher))
-println("Saved time-resolved data to ", name_file)
+        # Append to consolidated summary CSV (incremental — survives crashes)
+        open(summary_csv, "a") do io
+            println(io, "$row_idx,$NS,$ratio,$dφ,$mean_rate,$std_rate")
+        end
+        global row_idx += 1
 
-exit() # Exit before sweeping so we don't accidentally do a sweep if not intended.
+        # Time-resolved data: one file per (ratio, deltavarphi), grouped by ratio
+        time_resolved_path =
+            joinpath(ratio_dir, "time_resolved_deltavarphi_$(dφ).dat")
+        writedlm(time_resolved_path, hcat(t_sw, FI_sw, err_sw))
 
-#write(file, "Fisher_traj",  FisherT_SB_omega)
-#write(file, "QFisher_traj",  QFisherT_SB_omega)
-#write(file, "real_traj",  real_part)
-#write(file, "imag_part",  imag_part)
+        @everywhere GC.gc(true)
+    end
+end
 
-#p1 = plot(t_SB,exp_val1_SB)
-#plot!(p1,t_SB,exp_val2_SB)
-
-#p2 = plot(t_SB, FisherT_SB_omega)
-
-#p2 =plot(t_SB[2:end], FisherT_SB_omega[2:end] ./ t_SB[2:end], ribbon = ErrorFisher[2:end]./ t_SB[2:end],fillalpha = 0.25,color = :blue)
-#hline!(p2, [4*Omega*Omega/kappa])
-#hline!(p2, [4*Omega*Omega*cos(varphi-phase_homodyne)*cos(varphi-phase_homodyne)/kappa])
-#hline!(p2, [4])
-
-#p3 = plot(t_SB, emissions_SB)
-
-#display(plot(p1,p2,p3, layout= (3,1)))
-#savefig(name_fig)
-#println("Press Enter to exit...")
-#readline()
-
-############################################ deltavarphi sweep ################
-#deltavarphi_values = exp10.(range(log10(0.001), log10(0.1), length=2))
-#t_stat     = 2000.0
-#t_stat_idx = Int(floor(t_stat / (n_save * dt)))
-#
-#csv_path = "./FI_deltavarphi_sweep_N$(NS)_ratio$(Omega1/Omega_c)_singletraj.csv"
-#open(csv_path, "w") do io
-#    println(io, ",N,ratio,deltavarphi,mean_FI_rate,std_FI_rate")
-#end
-#println("Checkpoint file: $csv_path")
-#
-#for (k, dφ) in enumerate(deltavarphi_values)
-#    println("[$k/$(length(deltavarphi_values))] deltavarphi = $dφ")
-#    time_sw = time()
-#
-#    H_sw, _, Hdvarphi_sw, L_sw, _, dLvarphi_sw, ops_sw, _ =
-#        BTC_cascaded_model(NS, Omega1, Omega2, kappa, dφ)
-#
-#    t_sw, _, _, _, FI_sw, err_sw =
-#        Fisher_trajectory_reduced(H_sw, Hdvarphi_sw, L_sw, dLvarphi_sw,
-#                                   num_traj, psi0_SB, ops_sw, t_final, dt, n_save)
-#
-#    mean_rate = mean(FI_sw[t_stat_idx:end] ./ t_sw[t_stat_idx:end])
-#    std_rate  = mean(err_sw[t_stat_idx:end] ./ t_sw[t_stat_idx:end])
-#
-#    println("  mean FI rate = $mean_rate  ($(round(time()-time_sw, digits=1)) s)")
-#
-#    # Append result immediately so partial runs are not lost
-#    #open(csv_path, "a") do io
-#    #    println(io, "$(k-1),$NS,$(Omega1/Omega_c),$dφ,$mean_rate,$std_rate")
-#    #end
-#    # Store time resolved data for the last single trajectory as well
-#    writedlm("./FI_deltavarphi_sweep_N$(NS)_ratio$(Omega1/Omega_c)_deltavarphi$(dφ).dat",
-#            hcat(t_sw, FI_sw, err_sw))
-#    
-#
-#    @everywhere GC.gc(true)
-#end
-#println("Done: $csv_path")
+println("\nDone. Total wall time: $(round(time() - total_start, digits=1)) s")
+println("Output directory: $sweep_dir")
 @everywhere GC.gc(true)
 rmprocs(workers())
