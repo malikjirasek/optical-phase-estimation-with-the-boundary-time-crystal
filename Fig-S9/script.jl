@@ -25,7 +25,7 @@ Omega_c    = kappa * NS / 2
 dt         = 0.001
 t_final    = 3e4
 n_save     = 500           # save every n_save steps  →  dt_save = 0.5
-num_traj   = 27
+num_traj   = 1000
 
 # Steady-state averaging window for the FI rate
 t_stat     = 1e4
@@ -39,8 +39,8 @@ init_state_spins = init_state_spins / norm(init_state_spins)
 psi0_SB          = kron(init_state_spins, init_state_spins)
 
 # Sweep grid
-ratios             = [0.25]#, 0.25, 0.75, 4.0]
-deltavarphi_values = exp10.(range(log10(0.001), log10(0.1), length=2))
+ratios             = [0.1, 0.25, 0.75, 4.0]
+deltavarphi_values = exp10.(range(log10(0.001), log10(0.1), length=10))
 
 println("dt = $dt   t_final = $t_final   n_save = $n_save   num_traj = $num_traj")
 println("Steady-state window: t ∈ [$t_stat, $t_final]   (saved index $t_stat_idx:end)")
