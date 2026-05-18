@@ -1,0 +1,41 @@
+Parameter values: 
+
+NS = [10,20,30,40]
+
+dvarphi = 0.001
+
+t_final = 40
+timespan = 0:1:t_final
+kappa = 1
+Omega_c = kappa*NS/2
+Omega = [0.2,0.6,1,1.4,1.8,2.2,2.6]*Omega_c
+
+varphi = 1.570796327
+phase_homodyne = [1.570796327,0.785398163]  #Parameter set 1 or 2 respectively.
+
+num_traj = 1000
+
+# Initial state:
+theta = 0
+phi = 0
+init_state_spins = Dicke_state(theta, phi, NS/2)
+init_state_spins = init_state_spins/norm(init_state_spins)
+init_state = init_state_spins
+
+#Possible dt:
+dt1 = 0.005, n_save = 20
+dt2 = 0.001, n_save = 100
+dt3 = 0.0005, n_save = 200
+dt4 = 0.00025, n_save = 400
+dt5 = 0.000125, n_save = 800
+dt6 = 0.00005, n_save = 2000
+dt7 = 0.000025, n_save = 4000
+dt8 = 0.0000125, n_save = 8000
+dt9 = 0.000005, n_save = 20000
+dt10 = 0.0000025, n_save = 40000
+
+Ntime = Int(floor(t_final/dt)) # Number of timesteps
+
+#### Convergence with dt of the mean FI within the Monte Carlo error.
+#### Largest values Omega = [1.8,2.2,2.6]*Omega_c require smaller dt.
+#### For N=10, dt3 or dt4 is usually enough. N=20 requires dt7 and dt8. N=30 requires dt8 and dt9. N=40 requires dt8, dt9 and dt10. 
